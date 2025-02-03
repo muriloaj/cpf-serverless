@@ -1,0 +1,49 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # Nome da imagem que será construída
+  imageName: 'cpf-validator'
+  # Nome do seu Azure Container Registry (ACR), sem o prefixo "https://"
+  registry: '<YOUR_ACR_NAME>.azurecr.io'
+  # Tag da imagem; aqui estamos usando o número de build
+  imageTag: $(Build.BuildId)
+
+stages:
+- stage: BuildAndDeploy
+  displayName: "Build, Push and Deploy"
+  jobs:
+  - job: BuildAndPush
+    displayName: "Build and Push Docker Image"
+    steps:
+    - task: Docker@2
+      displayName: 'Build and push image to ACR'
+      inputs:
+        command: 'buildAndPush'
+        repository: '$(registry)/$(imageName)'
+        dockerfile: 'Dockerfile'
+        containerRegistry: '<ACR_SERVICE_CONNECTION>'   # Nome da sua conexão de serviço para o ACR
+        tags: |
+          $(imageTag)
+  
+  - job: Deploy
+    displayName: "Deploy Container Application"
+    dependsOn: BuildAndPush
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Deploy/update Container App'
+      inputs:
+        azureSubscription: '<AZURE_SUBSCRIPTION_SERVICE_CONNECTION>'  # Nome da sua conexão de serviço para a assinatura Azure
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "Deploying container image $(registry)/$(imageName):$(imageTag) to Azure Container App"
+          az containerapp update \
+            --name <YOUR_CONTAINER_APP_NAME> \
+            --resource-group <YOUR_RESOURCE_GROUP> \
+            --image $(registry)/$(imageName):$(imageTag)
